@@ -413,11 +413,12 @@ function progresoTramo(tr, y){
   for (let k = 0; k < 18; k++){ const m = (lo+hi)/2; if (puntoLut(m, tr.lut)[1] < y) lo = m; else hi = m; }
   return lo;
 }
-let itinerarioActivo = false, ultimoY = null, quietoT, minY = -1e9;
+let itinerarioActivo = false, ultimoY = null, quietoT, minY = -1e9, guiado = true;
 function actualizarItinerario(forzar){
   if (!itinerarioActivo && !forzar) return;
   const base = linea.getBoundingClientRect();
-  const y = Math.max(window.innerHeight*0.58 - base.top, minY);
+  const yVista = window.innerHeight*0.58 - base.top;
+  const y = guiado ? minY : Math.max(yVista, minY);
   pasos.forEach(p => { if (p.offsetTop - 30 < y) p.classList.add('visto'); });
   let pos = null, dir = mirando, alza = 0;
   tramos.forEach((tr, i) => {
@@ -522,7 +523,7 @@ async function empezar(){
   paloma.style.opacity = 1;
   const tr0 = tramos[0];
   const base0 = linea.getBoundingClientRect();
-  const desdeY = window.innerHeight*0.58 - base0.top, hastaY = tr0.y1 - 1;
+  const desdeY = tr0.y0 - 40, hastaY = tr0.y1 - 1;
   await new Promise(res => {
     const t0 = performance.now(), ms = 2600;
     (function paso(now){
@@ -536,8 +537,10 @@ async function empezar(){
   // 5. A partir de aquí, el invitado baja con el dedo
   const desliza = $('#desliza');
   let haDeslizado = false;
+  const y0 = window.scrollY;
   window.addEventListener('scroll', () => {
-    haDeslizado = true;
+    if (!haDeslizado && Math.abs(window.scrollY - y0) < 12) return;
+    haDeslizado = true; guiado = false;
     desliza.classList.remove('visible');
     requestAnimationFrame(() => actualizarItinerario());
   }, { passive: true });
