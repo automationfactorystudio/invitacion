@@ -413,17 +413,17 @@ function progresoTramo(tr, y){
   for (let k = 0; k < 18; k++){ const m = (lo+hi)/2; if (puntoLut(m, tr.lut)[1] < y) lo = m; else hi = m; }
   return lo;
 }
-let itinerarioActivo = false, ultimoY = null, quietoT;
+let itinerarioActivo = false, ultimoY = null, quietoT, minY = -1e9;
 function actualizarItinerario(forzar){
   if (!itinerarioActivo && !forzar) return;
   const base = linea.getBoundingClientRect();
-  const y = window.innerHeight*0.58 - base.top;
+  const y = Math.max(window.innerHeight*0.58 - base.top, minY);
   pasos.forEach(p => { if (p.offsetTop - 30 < y) p.classList.add('visto'); });
-  let pos = null, dir = mirando;
+  let pos = null, dir = mirando, alza = 0;
   tramos.forEach((tr, i) => {
     const t = progresoTramo(tr, y);
     tr.mp.style.strokeDashoffset = tr.L * (1 - t);
-    if (t > 0 && t < 1) { pos = puntoLut(t, tr.lut); const s = puntoLut(Math.min(1, t+.02), tr.lut); dir = s[0] >= pos[0] ? 1 : -1; }
+    if (t > 0 && t < 1) { pos = puntoLut(t, tr.lut); alza = t > .8 ? (t - .8)/.2 * 78 : 0; const s = puntoLut(Math.min(1, t+.02), tr.lut); dir = s[0] >= pos[0] ? 1 : -1; }
   });
   if (!itinerarioActivo) return;
   if (!pos){ // entre tramos: la paloma salta por encima del texto
@@ -432,14 +432,14 @@ function actualizarItinerario(forzar){
     else for (let i = 0; i < tramos.length - 1; i++){
       if (y >= tramos[i].y1 && y <= tramos[i+1].y0){
         const f = (y - tramos[i].y1) / (tramos[i+1].y0 - tramos[i].y1 || 1);
-        pos = [tramos[i].bx + (tramos[i+1].ax - tramos[i].bx)*f, tramos[i].by + (tramos[i+1].ay - tramos[i].by)*f - Math.sin(f*Math.PI)*60];
+        pos = [tramos[i].bx + (tramos[i+1].ax - tramos[i].bx)*f, tramos[i].by + (tramos[i+1].ay - tramos[i].by)*f - Math.sin(f*Math.PI)*60]; alza = 78*(1-f);
         dir = tramos[i+1].ax >= tramos[i].bx ? 1 : -1;
       }
     }
   }
   const e = escenario.getBoundingClientRect();
   const x = base.left - e.left + pos[0], yy = base.top - e.top + pos[1];
-  ponerPaloma(x, yy, 6, dir);
+  ponerPaloma(x + alza*0.4*dir, yy - alza, 6, dir);
   paloma.classList.add('rapido'); paloma.classList.remove('quieto');
   clearTimeout(quietoT); quietoT = setTimeout(() => { paloma.classList.remove('rapido'); paloma.classList.add('quieto'); }, 250);
 }
@@ -512,18 +512,36 @@ async function empezar(){
   paloma.style.opacity = 0;
   await espera(600);
 
-  // 4. Invitamos a bajar al itinerario
-  await espera(5200);
+  // 4. Baja sola al itinerario y la paloma dibuja el primer tramo
+  await espera(700);
   construirCamino();
-  const desliza = $('#desliza');
-  if (window.scrollY < $('#itinerario').offsetTop - window.innerHeight*0.6) desliza.classList.add('visible');
+  const itin = $('#itinerario');
+  window.scrollTo({ top: itin.offsetTop - 10, behavior: 'smooth' });
+  await espera(1200);
   itinerarioActivo = true;
-  actualizarItinerario();
   paloma.style.opacity = 1;
+  const tr0 = tramos[0];
+  const base0 = linea.getBoundingClientRect();
+  const desdeY = window.innerHeight*0.58 - base0.top, hastaY = tr0.y1 - 1;
+  await new Promise(res => {
+    const t0 = performance.now(), ms = 2600;
+    (function paso(now){
+      const t = Math.min(1, (now - t0)/ms);
+      minY = desdeY + (hastaY - desdeY)*suave(t);
+      actualizarItinerario();
+      if (t < 1) requestAnimationFrame(paso); else res();
+    })(t0);
+  });
+
+  // 5. A partir de aquí, el invitado baja con el dedo
+  const desliza = $('#desliza');
+  let haDeslizado = false;
   window.addEventListener('scroll', () => {
+    haDeslizado = true;
     desliza.classList.remove('visible');
     requestAnimationFrame(() => actualizarItinerario());
   }, { passive: true });
+  setTimeout(() => { if (!haDeslizado) desliza.classList.add('visible'); }, 1500);
 }
 
 window.addEventListener('resize', () => { if (itinerarioActivo) construirCamino(); });
